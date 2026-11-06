@@ -15,7 +15,8 @@ h1 { text-align: center; color: #38bdf8; }
 button { width: 100%; padding: 15px; margin-top: 12px; background: #0284c7; border: none; color: white; border-radius: 9px; font-size: 16px; font-weight: bold; cursor: pointer; }
 button:active { background: #0369a1; }
 input { width: 100%; padding: 14px; margin-top: 10px; border: none; border-radius: 8px; font-size: 16px; }
-#photo { width: 100%; margin-top: 15px; border-radius: 10px; display: none; }
+#photo, #lastPhoto { width: 100%; margin-top: 15px; border-radius: 10px; display: none; }
+#lastInfo { margin-top: 10px; font-size: 14px; color: #94a3b8; text-align: center; }
 #messages { background: #0f172a; min-height: 150px; max-height: 250px; overflow-y: auto; padding: 12px; border-radius: 8px; margin-top: 10px; overflow-wrap: anywhere; }
 .msg { padding: 10px; margin-bottom: 8px; background: #334155; border-radius: 7px; }
 .sent { border-left: 4px solid #38bdf8; }
@@ -32,6 +33,12 @@ input { width: 100%; padding: 14px; margin-top: 10px; border: none; border-radiu
   <h3>📷 CAMERA</h3>
   <button id="photoBtn" onclick="takePhoto()">TAKE A PHOTO</button>
   <img id="photo" alt="Captured photo">
+</div>
+
+<div class="card">
+  <h3>🕒 LAST AUTOMATIC PHOTO (every 30 s)</h3>
+  <img id="lastPhoto" alt="Last automatic photo">
+  <div id="lastInfo">Waiting for the first photo...</div>
 </div>
 
 <div class="card">
@@ -75,6 +82,26 @@ async function takePhoto() {
   btn.disabled = false;
 }
 
+// ---------- Dernière photo automatique ----------
+let lastPhotoId = 0;
+async function checkLastPhoto() {
+  try {
+    const r = await fetch("/api/last?t=" + Date.now());
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j.photoId && j.photoId !== lastPhotoId) {
+      lastPhotoId = j.photoId;
+      const img = document.getElementById("lastPhoto");
+      img.src = "/api/last.jpg?id=" + j.photoId;
+      img.style.display = "block";
+    }
+    if (j.photoId) {
+      document.getElementById("lastInfo").textContent =
+        "Photo #" + j.photoId + " - " + j.result;
+    }
+  } catch (e) { console.log(e); }
+}
+
 async function sendMessage() {
   const input = document.getElementById("messageInput");
   const msg = input.value.trim();
@@ -92,7 +119,7 @@ async function sendMessage() {
 
 // ---------- Valeur aléatoire 0-100 (envoi automatique) ----------
 async function sendRandom() {
-  const value = Math.floor(Math.random() * 101);   // 0 à 100
+  const value = Math.floor(Math.random() * 101);
   try {
     const response = await fetch("/api/send?msg=" + value);
     if (!response.ok) throw new Error("Send failed");
@@ -103,7 +130,7 @@ async function sendRandom() {
   }
 }
 
-let autoTimer = setInterval(sendRandom, 3000);   // démarre tout seul, toutes les 3 s
+let autoTimer = setInterval(sendRandom, 3000);
 
 function toggleAuto() {
   const btn = document.getElementById("autoBtn");
@@ -155,8 +182,10 @@ async function checkStatus() {
 
 setInterval(receiveMessage, 1000);
 setInterval(checkStatus, 2000);
+setInterval(checkLastPhoto, 3000);
 receiveMessage();
 checkStatus();
+checkLastPhoto();
 </script>
 </body>
 </html>
