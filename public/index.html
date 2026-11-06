@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32 CAM CONTROL</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 20px; background: #101827; color: white; font-family: Arial, sans-serif; }
+.container { max-width: 600px; margin: auto; }
+h1 { text-align: center; color: #38bdf8; }
+.status { text-align: center; margin: 15px; color: #f87171; }
+.status.on { color: #4ade80; }
+.card { background: #1e293b; padding: 20px; margin-top: 18px; border-radius: 14px; }
+button { width: 100%; padding: 15px; margin-top: 12px; background: #0284c7; border: none; color: white; border-radius: 9px; font-size: 16px; font-weight: bold; cursor: pointer; }
+button:active { background: #0369a1; }
+input { width: 100%; padding: 14px; margin-top: 10px; border: none; border-radius: 8px; font-size: 16px; }
+#photo { width: 100%; margin-top: 15px; border-radius: 10px; display: none; }
+#messages { background: #0f172a; min-height: 150px; max-height: 250px; overflow-y: auto; padding: 12px; border-radius: 8px; margin-top: 10px; overflow-wrap: anywhere; }
+.msg { padding: 10px; margin-bottom: 8px; background: #334155; border-radius: 7px; }
+.sent { border-left: 4px solid #38bdf8; }
+.received { border-left: 4px solid #4ade80; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>ESP32-CAM CONTROL</h1>
+<div class="status" id="status">● ESP32 OFFLINE</div>
+
+<div class="card">
+  <h3>📷 CAMERA</h3>
+  <button id="photoBtn" onclick="takePhoto()">TAKE A PHOTO</button>
+  <img id="photo" alt="Captured photo">
+</div>
+
+<div class="card">
+  <h3>📤 SEND MESSAGE TO ESP32</h3>
+  <input id="messageInput" type="text" placeholder="Write your message...">
+  <button onclick="sendMessage()">SEND MESSAGE</button>
+</div>
+
+<div class="card">
+  <h3>🎲 RANDOM VALUE (0-100)</h3>
+  <button id="autoBtn" onclick="toggleAuto()">AUTO SEND: ON</button>
+</div>
+
+<div class="card">
+  <h3>📥 RECEIVE MESSAGES FROM ESP32</h3>
+  <div id="messages"></div>
+</div>
+
+</div>
+
+<script>
+async function takePhoto() {
+  const photo = document.getElementById("photo");
+  const btn = document.getElementById("photoBtn");
+  btn.disabled = true;
+  addMessage("Taking photo...", "sent");
+  try {
+    const response = await fetch("/api/capture?t=" + Date.now());
+    if (!response.ok) throw new Error(await response.text());
+    const blob = await response.blob();
+    const oldURL = photo.dataset.url;
+    const newURL = URL.createObjectURL(blob);
+    photo.src = newURL;
+    photo.style.display = "block";
+    photo.onload = function () { if (oldURL) URL.revokeObjectURL(oldURL); };
+    photo.dataset.url = newURL;
+    addMessage("Photo received successfully!", "received");
+  } catch (error) {
+    addMessage("Photo error: " + error.message, "received");
+  }
+  btn.disabled = false;
+}
+
+async function sendMessage() {
+  const input = document.getElementById("messageInput");
+  const msg = input.value.trim();
+  if (msg === "") return;
+  try {
+    const response = await fetch("/api/send?msg=" + encodeURIComponent(msg));
+    if (!response.ok) throw new Error("Send failed");
+    await response.text();
+    addMessage("YOU: " + msg, "sent");
+    input.value = "";
+  } catch (error) {
+    addMessage("Error: " + error.message, "received");
+  }
+}
+
+// ---------- Valeur aléatoire 0-100 (envoi automatique) ----------
+async function sendRandom() {
+  const value = Math.floor(Math.random() * 101);   // 0 à 100
+  try {
+    const response = await fetch("/api/send?msg=" + value);
+    if (!response.ok) throw new Error("Send failed");
+    await response.text();
+    addMessage("YOU: random value " + value, "sent");
+  } catch (error) {
+    addMessage("Error: " + error.message, "received");
+  }
+}
+
+let autoTimer = setInterval(sendRandom, 3000);   // démarre tout seul, toutes les 3 s
+
+function toggleAuto() {
+  const btn = document.getElementById("autoBtn");
+  if (autoTimer) {
+    clearInterval(autoTimer);
+    autoTimer = null;
+    btn.textContent = "AUTO SEND: OFF";
+  } else {
+    sendRandom();
+    autoTimer = setInterval(sendRandom, 3000);
+    btn.textContent = "AUTO SEND: ON";
+  }
+}
+
+document.getElementById("messageInput").addEventListener("keydown", function (event) {
+  if (event.key === "Enter") sendMessage();
+});
+
+function addMessage(text, type) {
+  const div = document.createElement("div");
+  div.className = "msg " + type;
+  div.textContent = text;
+  const box = document.getElementById("messages");
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function receiveMessage() {
+  try {
+    const response = await fetch("/api/receive?t=" + Date.now());
+    if (!response.ok) return;
+    const message = await response.text();
+    if (message.length > 0) addMessage("ESP32: " + message, "received");
+  } catch (error) { console.log(error); }
+}
+
+async function checkStatus() {
+  const s = document.getElementById("status");
+  try {
+    const r = await fetch("/api/status?t=" + Date.now());
+    const j = await r.json();
+    s.textContent = j.online ? "● ESP32 ONLINE" : "● ESP32 OFFLINE";
+    s.className = j.online ? "status on" : "status";
+  } catch (e) {
+    s.textContent = "● SERVER UNREACHABLE";
+    s.className = "status";
+  }
+}
+
+setInterval(receiveMessage, 1000);
+setInterval(checkStatus, 2000);
+receiveMessage();
+checkStatus();
+</script>
+</body>
+</html>
