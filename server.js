@@ -20,6 +20,7 @@ let lastSeen = 0;
 let lastPhoto = null;             // dernière photo reçue
 let lastResult = "aucune analyse";
 let lastNotif = 0;
+let photoId = 0;
 
 // ---------- Mot de passe optionnel (pas pour /api/esp/...) ----------
 app.use((req, res, next) => {
@@ -144,7 +145,8 @@ app.post("/api/esp/photo", express.raw({ type: "image/jpeg", limit: "5mb" }), (r
   autoPending = false;
   clearTimeout(autoTimeout);
   captureSent = false;
-  lastPhoto = req.body;
+   lastPhoto = req.body;
+  photoId++;
 
   const list = pendingCaptures;
   pendingCaptures = [];
@@ -191,7 +193,7 @@ app.get("/api/last.jpg", (req, res) => {
   if (!lastPhoto) return res.status(404).send("Aucune photo");
   res.set({ "Content-Type": "image/jpeg", "Cache-Control": "no-store" }).send(lastPhoto);
 });
-app.get("/api/last", (req, res) => res.json({ result: lastResult }));
+app.get("/api/last", (req, res) => res.json({ result: lastResult, photoId }));
 
 app.use(express.static("public"));
 
